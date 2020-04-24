@@ -14,11 +14,14 @@ namespace MongoGeolocation.Mongo.Geolocation
 {
     public class MongoGeolocationDriver<TEntity> where TEntity : IGeoEntity
     {
-        public string CollectionName { get; }
+        #region Variables
+        private string CollectionName { get; }
         private IMongoDatabase MongoDatabase { get; }
         private MongoClient MongoClient { get; }
         private IMongoCollection<TEntity> MongoCollection { get; }
+        #endregion
         
+        #region Constructors
         public MongoGeolocationDriver(IConfiguration config)
         {
             var mongoConfig = config.GetSection("Mongo");
@@ -29,7 +32,9 @@ namespace MongoGeolocation.Mongo.Geolocation
             this.CollectionName = mongoConfig["collectionName"];
             this.MongoCollection = this.GetCollection();
         }
+        #endregion
 
+        #region Methods
         public IMongoCollection<TEntity> GetCollection()
             => this.MongoDatabase.GetCollection<TEntity>(this.CollectionName);
         
@@ -68,5 +73,28 @@ namespace MongoGeolocation.Mongo.Geolocation
             entity.Point = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(new GeoJson2DGeographicCoordinates(point.X, point.Y));
             await this.MongoCollection.ReplaceOneAsync(h => h._id == entity._id, entity);
         }
+        
+        public async Task UpdateAllGeolocations(Func<TEntity, Task<PointF>> callbackGetCoordinates)
+        {
+            using var entities = await this.MongoCollection.FindAsync("{}");
+
+            foreach (var entity in (await entities.ToListAsync()).Where(e => e.Point == null))
+            {
+                this.UpdateEntityGeolocation(entity, callbackGetCoordinates);
+            }
+        }
+        
+        private async void UpdateEntityGeolocation(TEntity entity, Func<TEntity, Task<PointF>> callbackGetCoordinates)
+        {
+            if (entity.Point != null)
+                return;
+            
+            var point = await callbackGetCoordinates(entity);
+            if (point.IsEmpty)
+                return;
+            
+            await this.UpdateGeolocation(entity, point);
+        }
+        #endregion
     }
 }

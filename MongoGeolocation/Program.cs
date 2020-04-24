@@ -10,7 +10,7 @@ using MongoGeolocation.Mongo.Geolocation;
 
 namespace MongoGeolocation
 {
-    class Program
+    internal class Program
     {
         private static IConfiguration Configuration { get; set; }
         private IMappingServiceDriver MappingService { get; set; }
@@ -71,17 +71,30 @@ namespace MongoGeolocation
 
         private async Task Run()
         {
+            // Make sure that the Geospatial index exists on the hospital data
             await this.MongoGeolocationDriver.CreateGeospatialIndex(h => h.Point);
             
+            // For the radius search
+            var miles = 3.0;
+            var sMiles = Configuration["App:miles"];
+            if (!string.IsNullOrEmpty(sMiles))
+                miles = double.Parse(sMiles);
+            
+            // The downloaded hospital data has a column that has a nullable text field that can a string like this:
+            // POINT (-73.908273, 40.982746)
+            // We just want to take that and parse it into a lat/lng coordinate
             var locationRegex = new Regex(@"^POINT \((?<lat>[-+]*\d*\.\d*) (?<lng>[-+]*\d*\.\d*)\)$");
             
             using var hospitals = await this.Hospitals.FindAsync("{}");
             var list = await hospitals.ToListAsync();
+            
+            // Only consider all of the hospitals in Brooklyn
             foreach (var h in list.Where(h => h.ZipCode >= 11200 && h.ZipCode < 11300).OrderBy(h => h.ZipCode))
             {
                 var lat = 0.0;
                 var lng = 0.0;
                 
+                // Use the regular expression to get the coordinates from the "Location" field
                 if (!string.IsNullOrEmpty(h.Location))
                 {
                     var match = locationRegex.Match(h.Location);
@@ -92,13 +105,10 @@ namespace MongoGeolocation
                     }
                 }
                 
+                // Print out the hospital info along with the parsed coordinates
                 Console.WriteLine($"{h.FacilityName}, {h.Address}, {h.City}, {h.State}, {h.ZipCode}, {h.Location}, {lat}, {lng}");
-
-                var miles = 3.0;
-                var sMiles = Configuration["App:miles"];
-                if (!string.IsNullOrEmpty(sMiles))
-                    miles = double.Parse(sMiles);
                 
+                // Print out all of the hospitals that are within 'x' miles from this hospital
                 try
                 {
                     var hospitalsWithinRadius = await this.MongoGeolocationDriver.FindNear(h2 => h2.Point, lat, lng, miles);
@@ -115,32 +125,15 @@ namespace MongoGeolocation
             }
         }
 
+        /// <summary>
+        /// This gets called only if we start the application with the "update" argument.
+        /// This will go through all of the hospitals in the Mongo collection and update their geocoordinates.
+        /// </summary>
         private async Task UpdateAllHospitalsGeolocation()
         {
-            using var hospitals = await this.Hospitals.FindAsync("{}");
-            var i = 0;
-            
-            foreach (var h in await hospitals.ToListAsync())
-            { 
-                i++;
-                if (h.Point != null)
-                    continue;
-                
-                this.UpdateHospitalGeolocation(h);
-                Console.WriteLine($"Updating record {i}");
-            }
-        }
-        
-        private async void UpdateHospitalGeolocation(Hospital hospital)
-        {
-            if (hospital.Point != null)
-                return;
-            
-            var point = await this.MappingService.GetCoordinates(hospital.Address, hospital.City, hospital.State, hospital.ZipCode.ToString());
-            if (point.IsEmpty)
-                return;
-            
-            await this.MongoGeolocationDriver.UpdateGeolocation(hospital, point);
+            await this.MongoGeolocationDriver.UpdateAllGeolocations(async hospital =>
+                await this.MappingService.GetCoordinates(hospital.Address, hospital.City, hospital.State, hospital.ZipCode.ToString())
+            );
         }
     }
 }
