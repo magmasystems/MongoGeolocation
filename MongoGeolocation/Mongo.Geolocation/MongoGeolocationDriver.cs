@@ -38,17 +38,17 @@ namespace MongoGeolocation.Mongo.Geolocation
         public IMongoCollection<TEntity> GetCollection()
             => this.MongoDatabase.GetCollection<TEntity>(this.CollectionName);
         
-        public async Task<List<TEntity>> FindNear(Expression<Func<TEntity, object>> field, double latitude, double longitude, double maxDistanceInMiles)
+        public async Task<IEnumerable<TEntity>> FindNearAsync(Expression<Func<TEntity, object>> field, double latitude, double longitude, double maxDistanceInMiles)
         {
             const double METERS_PER_MILE = 1609.34;
 
             var point = GeoJson.Point(GeoJson.Geographic(latitude, longitude));
             var filter = Builders<TEntity>.Filter.NearSphere(field, point, maxDistanceInMiles * METERS_PER_MILE);
-            var list = await this.MongoCollection.FindAsync<TEntity>(filter);
-            return await list.ToListAsync();
+            var cursor = await this.MongoCollection.FindAsync<TEntity>(filter);
+            return await cursor.ToListAsync();
         }
         
-        public async Task CreateGeospatialIndex(Expression<Func<TEntity, object>> field)
+        public async Task CreateGeospatialIndexAsync(Expression<Func<TEntity, object>> field)
         {
             var indexFound = false;
             var expr = field.Body as MemberExpression;
@@ -68,13 +68,13 @@ namespace MongoGeolocation.Mongo.Geolocation
             await this.MongoCollection.Indexes.CreateOneAsync(new CreateIndexModel<TEntity>(keys));
         }
         
-        public async Task UpdateGeolocation(TEntity entity, PointF point)
+        public async Task UpdateGeolocationAsync(TEntity entity, PointF point)
         {
             entity.Point = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(new GeoJson2DGeographicCoordinates(point.X, point.Y));
             await this.MongoCollection.ReplaceOneAsync(h => h._id == entity._id, entity);
         }
         
-        public async Task UpdateAllGeolocations(Func<TEntity, Task<PointF>> callbackGetCoordinates)
+        public async Task UpdateAllGeolocationsAsync(Func<TEntity, Task<PointF>> callbackGetCoordinates)
         {
             using var entities = await this.MongoCollection.FindAsync("{}");
 
@@ -93,7 +93,7 @@ namespace MongoGeolocation.Mongo.Geolocation
             if (point.IsEmpty)
                 return;
             
-            await this.UpdateGeolocation(entity, point);
+            await this.UpdateGeolocationAsync(entity, point);
         }
         #endregion
     }

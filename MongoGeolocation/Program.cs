@@ -33,7 +33,7 @@ namespace MongoGeolocation
             {
                 if (args[0] == "update")
                 {
-                    await app.UpdateAllHospitalsGeolocation();
+                    await app.UpdateAllHospitalsGeolocationAsync();
                 }
             }
             else
@@ -72,7 +72,7 @@ namespace MongoGeolocation
         private async Task Run()
         {
             // Make sure that the Geospatial index exists on the hospital data
-            await this.MongoGeolocationDriver.CreateGeospatialIndex(h => h.Point);
+            await this.MongoGeolocationDriver.CreateGeospatialIndexAsync(h => h.Point);
             
             // For the radius search
             var miles = 3.0;
@@ -111,7 +111,7 @@ namespace MongoGeolocation
                 // Print out all of the hospitals that are within 'x' miles from this hospital
                 try
                 {
-                    var hospitalsWithinRadius = await this.MongoGeolocationDriver.FindNear(h2 => h2.Point, lat, lng, miles);
+                    var hospitalsWithinRadius = await this.MongoGeolocationDriver.FindNearAsync(h2 => h2.Point, lat, lng, miles);
                     foreach (var h2 in hospitalsWithinRadius.Where(h2 => h2._id != h._id))
                     {
                         Console.WriteLine($"    Within {miles} miles: {h2.FacilityName}");
@@ -129,9 +129,9 @@ namespace MongoGeolocation
         /// This gets called only if we start the application with the "update" argument.
         /// This will go through all of the hospitals in the Mongo collection and update their geocoordinates.
         /// </summary>
-        private async Task UpdateAllHospitalsGeolocation()
+        private async Task UpdateAllHospitalsGeolocationAsync()
         {
-            await this.MongoGeolocationDriver.UpdateAllGeolocations(async hospital =>
+            await this.MongoGeolocationDriver.UpdateAllGeolocationsAsync(async hospital =>
                 await this.MappingService.GetCoordinates(hospital.Address, hospital.City, hospital.State, hospital.ZipCode.ToString())
             );
         }
