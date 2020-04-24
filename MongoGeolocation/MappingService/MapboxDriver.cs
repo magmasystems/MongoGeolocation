@@ -4,14 +4,14 @@ using System.Drawing;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 
-namespace MongoGeolocation
+namespace MongoGeolocation.MappingService
 {
     public class MapboxDriver : IMappingServiceDriver
     {
-        private string APIToken { get; } =
-            "pk.eyJ1IjoibWFnbWFzeXN0ZW1zIiwiYSI6ImNrOWN5Z2RuYzA5N2ozZHM0NzlmbHZhdTcifQ.sDsBbaO9vjIr4qGCO8_oXg";
+        private string APIToken { get; }
         private HttpClient HttpClient { get; }
         
         /*
@@ -92,9 +92,15 @@ namespace MongoGeolocation
             }
          */
 
-        public MapboxDriver()
+        public MapboxDriver(IConfiguration config)
         {
             this.HttpClient = new HttpClient();
+
+            var apiKey = config["MappingService:apiKey"];
+            if (string.IsNullOrEmpty(apiKey))
+                throw new ApplicationException("The apiKey is missing from the MappingService section of the config file");
+
+            this.APIToken = apiKey;
         }
 
         public async Task<PointF> GetCoordinates(string address, string city, string state, string zip)

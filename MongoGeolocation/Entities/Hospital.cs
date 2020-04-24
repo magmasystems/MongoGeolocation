@@ -2,7 +2,7 @@ using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver.GeoJsonObjectModel;
 
-namespace MongoGeolocation
+namespace MongoGeolocation.Entities
 {
     internal class Hospital
     {

@@ -1,7 +1,7 @@
 using System.Drawing;
 using System.Threading.Tasks;
 
-namespace MongoGeolocation
+namespace MongoGeolocation.MappingService
 {
     public interface IMappingServiceDriver
     {

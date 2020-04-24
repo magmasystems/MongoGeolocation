@@ -8,6 +8,8 @@ using Microsoft.Extensions.Configuration;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.GeoJsonObjectModel;
+using MongoGeolocation.Entities;
+using MongoGeolocation.MappingService;
 
 namespace MongoGeolocation
 {
@@ -69,11 +71,11 @@ namespace MongoGeolocation
                 var type = Type.GetType(mappingServiceType);
                 if (type != null)
                 {
-                    this.MappingService = Activator.CreateInstance(type) as IMappingServiceDriver;
+                    this.MappingService = Activator.CreateInstance(type, Configuration) as IMappingServiceDriver;
                 }
             }
             
-            this.MappingService ??= new MapboxDriver();
+            this.MappingService ??= new MapboxDriver(Configuration);
         }
 
         private async Task Run()
@@ -101,7 +103,11 @@ namespace MongoGeolocation
                 
                 Console.WriteLine($"{h.FacilityName}, {h.Address}, {h.City}, {h.State}, {h.ZipCode}, {h.Location}, {lat}, {lng}");
 
-                const double miles = 3.0;
+                double miles = 3.0;
+                var sMiles = Configuration["App:miles"];
+                if (!string.IsNullOrEmpty(sMiles))
+                    miles = double.Parse(sMiles);
+                
                 try
                 {
                     var hospitalsWithinRadius = await this.FindNear<Hospital>(this.CollectionName, h2 => h2.Point, lat, lng, miles);
