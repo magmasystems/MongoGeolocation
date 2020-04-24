@@ -4,7 +4,7 @@ using MongoDB.Driver.GeoJsonObjectModel;
 
 namespace MongoGeolocation.Entities
 {
-    internal class Hospital
+    internal class Hospital : IGeoEntity
     {
         /*
            {

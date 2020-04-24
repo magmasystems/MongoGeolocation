@@ -1,15 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
-using MongoDB.Bson;
 using MongoDB.Driver;
-using MongoDB.Driver.GeoJsonObjectModel;
 using MongoGeolocation.Entities;
 using MongoGeolocation.MappingService;
+using MongoGeolocation.Mongo.Geolocation;
 
 namespace MongoGeolocation
 {
@@ -17,9 +14,8 @@ namespace MongoGeolocation
     {
         private static IConfiguration Configuration { get; set; }
         private IMappingServiceDriver MappingService { get; set; }
-        private MongoClient MongoClient { get; }
-        private IMongoDatabase MongoDatabase { get; }
-        private string CollectionName { get; }
+        private MongoGeolocationDriver<Hospital> MongoGeolocationDriver { get; }
+        
         private IMongoCollection<Hospital> Hospitals { get; }
         
         static async Task Main(string[] args)
@@ -52,17 +48,12 @@ namespace MongoGeolocation
 
         private Program()
         {
-            var mongoConfig = Configuration.GetSection("Mongo");
-            var connectionString = mongoConfig["connectionString"];
-            this.MongoClient = new MongoClient(connectionString);
-
-            this.MongoDatabase = this.MongoClient.GetDatabase(mongoConfig["databaseName"]);
-            this.CollectionName = mongoConfig["collectionName"];
-            this.Hospitals = this.MongoDatabase.GetCollection<Hospital>(this.CollectionName);
+            this.MongoGeolocationDriver = new MongoGeolocationDriver<Hospital>(Configuration);
+            this.Hospitals = this.MongoGeolocationDriver.GetCollection();
             
             this.CreateMappingService();
         }
-
+        
         private void CreateMappingService()
         {
             var mappingServiceType = Configuration["MappingService:type"];
@@ -80,7 +71,7 @@ namespace MongoGeolocation
 
         private async Task Run()
         {
-            await this.CreateGeospatialIndex(this.Hospitals, h => h.Point);
+            await this.MongoGeolocationDriver.CreateGeospatialIndex(h => h.Point);
             
             var locationRegex = new Regex(@"^POINT \((?<lat>[-+]*\d*\.\d*) (?<lng>[-+]*\d*\.\d*)\)$");
             
@@ -103,14 +94,14 @@ namespace MongoGeolocation
                 
                 Console.WriteLine($"{h.FacilityName}, {h.Address}, {h.City}, {h.State}, {h.ZipCode}, {h.Location}, {lat}, {lng}");
 
-                double miles = 3.0;
+                var miles = 3.0;
                 var sMiles = Configuration["App:miles"];
                 if (!string.IsNullOrEmpty(sMiles))
                     miles = double.Parse(sMiles);
                 
                 try
                 {
-                    var hospitalsWithinRadius = await this.FindNear<Hospital>(this.CollectionName, h2 => h2.Point, lat, lng, miles);
+                    var hospitalsWithinRadius = await this.MongoGeolocationDriver.FindNear(h2 => h2.Point, lat, lng, miles);
                     foreach (var h2 in hospitalsWithinRadius.Where(h2 => h2._id != h._id))
                     {
                         Console.WriteLine($"    Within {miles} miles: {h2.FacilityName}");
@@ -148,41 +139,8 @@ namespace MongoGeolocation
             var point = await this.MappingService.GetCoordinates(hospital.Address, hospital.City, hospital.State, hospital.ZipCode.ToString());
             if (point.IsEmpty)
                 return;
-
-            hospital.Point = new GeoJsonPoint<GeoJson2DGeographicCoordinates>(new GeoJson2DGeographicCoordinates(point.X, point.Y));
-            await this.Hospitals.ReplaceOneAsync(h => h._id == hospital._id, hospital);
-        }
-
-        private async Task CreateGeospatialIndex<TEntity>(IMongoCollection<TEntity> collection, Expression<Func<TEntity, object>> field)
-        {
-            var indexFound = false;
-            var expr = field.Body as MemberExpression;
-            var memberName = expr?.Member.Name;
             
-            await collection.Indexes.ListAsync().Result.ForEachAsync(idx =>
-            {
-                var key = idx["key"].ToBsonDocument().Elements.First().Name;
-                if (memberName != null && key.Equals(memberName, StringComparison.OrdinalIgnoreCase)) 
-                    indexFound = true;
-            });
-
-            if (indexFound)
-                return;
-            
-            var keys = Builders<TEntity>.IndexKeys.Geo2DSphere(field);
-            await collection.Indexes.CreateOneAsync(new CreateIndexModel<TEntity>(keys));
-        }
-
-        private async Task<List<TEntity>> FindNear<TEntity>(string collectionName, Expression<Func<TEntity, object>> field, double latitude, double longitude, double maxDistanceInMiles)
-        {
-            var METERS_PER_MILE = 1609.34;
-
-            var collection = this.MongoDatabase.GetCollection<TEntity>(collectionName);
-                
-            var point = GeoJson.Point(GeoJson.Geographic(latitude, longitude));
-            var filter = Builders<TEntity>.Filter.NearSphere(field, point, maxDistanceInMiles * METERS_PER_MILE);
-            var list = await collection.FindAsync<TEntity>(filter);
-            return await list.ToListAsync();
+            await this.MongoGeolocationDriver.UpdateGeolocation(hospital, point);
         }
     }
 }
