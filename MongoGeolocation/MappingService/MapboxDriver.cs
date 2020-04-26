@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web;
 using Microsoft.Extensions.Configuration;
@@ -9,11 +8,8 @@ using Newtonsoft.Json;
 
 namespace MongoGeolocation.MappingService
 {
-    public class MapboxDriver : IMappingServiceDriver
+    public class MapboxDriver : MappingServiceBase
     {
-        private string APIToken { get; }
-        private HttpClient HttpClient { get; }
-        
         /*
           GET
           https://api.mapbox.com/geocoding/v5/mapbox.places/374%20STOCKHOLM%20STREET%2C%20BROOKLYN%2C%20NY%2011237.json?types=address&access_token=pk.eyJ1IjoibWFnbWFzeXN0ZW1zIiwiYSI6ImNrOWN5Z2RuYzA5N2ozZHM0NzlmbHZhdTcifQ.sDsBbaO9vjIr4qGCO8_oXg&limit=1
@@ -92,18 +88,11 @@ namespace MongoGeolocation.MappingService
             }
          */
 
-        public MapboxDriver(IConfiguration config)
+        public MapboxDriver(IConfiguration config) : base(config)
         {
-            this.HttpClient = new HttpClient();
-
-            var apiKey = config["MappingService:apiKey"];
-            if (string.IsNullOrEmpty(apiKey))
-                throw new ApplicationException("The apiKey is missing from the MappingService section of the config file");
-
-            this.APIToken = apiKey;
         }
 
-        public async Task<PointF> GetCoordinates(string address, string city, string state, string zip)
+        public override async Task<PointF> GetCoordinates(string address, string city, string state, string zip)
         {
             var mapboxResponse = await this.GetGeocoding(address, city, state, zip);
             if (mapboxResponse == null)
