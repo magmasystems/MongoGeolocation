@@ -6,12 +6,12 @@ using Microsoft.Extensions.Configuration;
 
 namespace MongoGeolocation.MappingService
 {
-    public abstract class MappingServiceBase : IMappingServiceDriver
+    public abstract class MappingDriverBase : IMappingServiceDriver
     {
         protected string APIToken { get; }
         protected HttpClient HttpClient { get; }
 
-        protected MappingServiceBase(IConfiguration config)
+        protected MappingDriverBase(IConfiguration config)
         {
             this.HttpClient = new HttpClient();
 

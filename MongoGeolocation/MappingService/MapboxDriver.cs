@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace MongoGeolocation.MappingService
 {
-    public class MapboxDriver : MappingServiceBase
+    public class MapboxDriver : MappingDriverBase
     {
         /*
           GET
